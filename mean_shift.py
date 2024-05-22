@@ -18,8 +18,7 @@ def _distance_to_group(point, group):
     return min_distance
     
 @jit(nopython=True, cache=True, fastmath=True)
-def _determine_nearest_group(point, groups):    
-    GROUP_DISTANCE_TOLERANCE = .1
+def _determine_nearest_group(point, groups, GROUP_DISTANCE_TOLERANCE):
     nearest_group_index = -9999
     index = 0
     for idx in range(len(groups)):
@@ -31,22 +30,21 @@ def _determine_nearest_group(point, groups):
     return nearest_group_index
     
 @jit(nopython=True, cache=True, fastmath=True)
-def _group_points(points):
+def _group_points(points, GROUP_DISTANCE_TOLERANCE):
     group_assignment = np.array([0,])
-    groups = List( points[0:1] )
+    groups = List([points[0][np.newaxis, :]])
     group_index = 1
     for idx in range(1, len(points)):
         point = points[idx]
-        nearest_group_index = _determine_nearest_group(point, groups)
+        nearest_group_index = _determine_nearest_group(point, groups, GROUP_DISTANCE_TOLERANCE)
         if nearest_group_index == -9999:
             # create new group
             group_assignment = np.append(group_assignment, group_index)
             group_index += 1
-            groups.append( point )
+            groups.append( point[np.newaxis, :] )
         else:
             group_assignment = np.append(group_assignment, nearest_group_index)
-            # print(type(groups[nearest_group_index]), groups[nearest_group_index].shape)
-            groups[nearest_group_index] = np.append(groups[nearest_group_index], points[idx:idx+1])
+            groups[nearest_group_index] = np.append(groups[nearest_group_index], points[idx][np.newaxis, :], axis=0)
     return group_assignment
 
 @jit(nopython=True, cache=True, fastmath=True)
@@ -73,8 +71,9 @@ def _shift_point(point, points, kernel_bandwidth):
     shifted_point = np.multiply(tiled_weights.transpose(), points).sum(axis=0) / denominator
     return shifted_point
 
-def mean_shift(points, kernel_bandwidth):
-    MIN_DISTANCE = 0.000001
+@jit(nopython=True, cache=True, fastmath=True)
+def mean_shift(points, kernel_bandwidth, GROUP_DISTANCE_TOLERANCE=1e-1, MIN_DISTANCE=1e-6):
+    points = points.astype(np.float64)
     
     shift_points = points.copy()
     max_min_dist = 1
@@ -98,5 +97,5 @@ def mean_shift(points, kernel_bandwidth):
                 still_shifting[i] = False
             shift_points[i] = p_new
 
-    group_assignments = _group_points(shift_points)
+    group_assignments = _group_points(shift_points, GROUP_DISTANCE_TOLERANCE)
     return group_assignments
